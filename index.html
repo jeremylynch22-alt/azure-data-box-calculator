@@ -1,0 +1,141 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Azure Data Box Cost Calculator</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 2rem; max-width: 800px; margin: auto; background: #f9f9f9; }
+    h1 { text-align: center; margin-bottom: 2rem; }
+    label { display: block; font-weight: bold; margin-top: 1rem; }
+    input { width: 100%; padding: 0.5rem; margin-top: 0.5rem; font-size: 1rem; }
+    .card { background: white; padding: 1rem; margin-top: 2rem; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.05); }
+    ul { padding-left: 1.2rem; }
+    li { margin: 0.5rem 0; }
+    .total { font-size: 1.2rem; font-weight: bold; margin-top: 1rem; }
+  </style>
+</head>
+<body>
+  <img src="https://lenslockinc.sharepoint.com/:i:/g/EWG59A9CPVJIjxRBY-PpZh0BgSSS-V0zF11weuLmmCt1JQ?e=PII4aK" alt="LensLock Logo" style="display:block; margin:0 auto 1rem auto; width:200px;" />
+  <h1>Azure Data Box Cost Calculator</h1>
+
+  <label for="dataSizeTB">Enter Total Data Size (in TB):</label>
+  <input type="number" id="dataSizeTB" value="1" min="0" />
+
+  <label for="extraDays">Extra Days Needed (beyond included days):</label>
+  <input type="number" id="extraDays" value="0" min="0" />
+
+  <div class="card">
+    <h2>Suggested Data Box Order</h2>
+    <ul id="boxPlanList"></ul>
+
+    <h2>Cost Breakdown</h2>
+    <ul id="costBreakdown"></ul>
+    <div class="total" id="totalCost"></div>
+  </div>
+
+  <script>
+    const internalFlatFee = 750;
+    const boxOptions = {
+      "Data Box": { serviceFee: 250, extraDayFee: 15, shipping: 95, includedDays: 10, capacity: 80 },
+      "Data Box 120": { serviceFee: 350, extraDayFee: 50, shipping: 95, includedDays: 10, capacity: 120 },
+      "Data Box 525": { serviceFee: 1500, extraDayFee: 200, shipping: 95, includedDays: 20, capacity: 525 },
+      "Data Box Heavy": { serviceFee: 4000, extraDayFee: 100, shipping: 1500, includedDays: 20, capacity: 800 }
+    };
+
+    function getAllCombos(maxCount = 6) {
+      const types = Object.keys(boxOptions);
+      const combos = [];
+      for (let a = 0; a <= maxCount; a++) {
+        for (let b = 0; b <= maxCount; b++) {
+          for (let c = 0; c <= maxCount; c++) {
+            for (let d = 0; d <= maxCount; d++) {
+              const combo = [a, b, c, d];
+              if (a + b + c + d === 0) continue;
+              combos.push(combo);
+            }
+          }
+        }
+      }
+      return combos;
+    }
+
+    function getBestBoxCombo(sizeTB, extraDays) {
+      const boxTypes = Object.keys(boxOptions);
+      const combos = getAllCombos(6);
+      let best = null;
+
+      combos.forEach(combo => {
+        let totalCapacity = 0;
+        let totalCost = 0;
+        let comboPlan = [];
+
+        combo.forEach((count, i) => {
+          if (count === 0) return;
+          const type = boxTypes[i];
+          const box = boxOptions[type];
+          const cost = count * (box.serviceFee + box.shipping + box.extraDayFee * extraDays);
+          totalCapacity += count * box.capacity;
+          totalCost += cost;
+          comboPlan.push({ type, count });
+        });
+
+        if (totalCapacity >= sizeTB) {
+          totalCost += internalFlatFee;
+          if (!best || totalCost < best.totalCost) {
+            best = { comboPlan, totalCost };
+          }
+        }
+      });
+
+      return best;
+    }
+
+    function update() {
+      const dataSizeTB = parseFloat(document.getElementById('dataSizeTB').value) || 0;
+      const extraDays = parseInt(document.getElementById('extraDays').value) || 0;
+      const result = getBestBoxCombo(dataSizeTB, extraDays);
+
+      const boxPlanList = document.getElementById('boxPlanList');
+      const costBreakdown = document.getElementById('costBreakdown');
+      const totalCostEl = document.getElementById('totalCost');
+
+      boxPlanList.innerHTML = '';
+      costBreakdown.innerHTML = '';
+
+      if (!result) {
+        totalCostEl.textContent = 'No valid combination found.';
+        return;
+      }
+
+      let boxCostTotal = 0;
+
+      result.comboPlan.forEach(({ type, count }) => {
+        const box = boxOptions[type];
+        const cost = count * (box.serviceFee + box.shipping + box.extraDayFee * extraDays);
+        boxCostTotal += cost;
+
+        const liPlan = document.createElement('li');
+        liPlan.textContent = `${count} x ${type} (${box.capacity}TB each)`;
+        boxPlanList.appendChild(liPlan);
+
+        const liCost = document.createElement('li');
+        liCost.textContent = `${type}: $${box.serviceFee} service + $${box.shipping} shipping + $${box.extraDayFee} x ${extraDays} days x ${count} = $${cost}`;
+        costBreakdown.appendChild(liCost);
+      });
+
+      const internal = internalFlatFee;
+      const internalLi = document.createElement('li');
+      internalLi.textContent = `Internal Cost (flat fee): $${internal}`;
+      costBreakdown.appendChild(internalLi);
+
+      totalCostEl.textContent = `Total: $${(boxCostTotal + internal).toLocaleString()}`;
+    }
+
+    document.getElementById('dataSizeTB').addEventListener('input', update);
+    document.getElementById('extraDays').addEventListener('input', update);
+    window.addEventListener('load', update);
+  </script>
+</body>
+</html>
